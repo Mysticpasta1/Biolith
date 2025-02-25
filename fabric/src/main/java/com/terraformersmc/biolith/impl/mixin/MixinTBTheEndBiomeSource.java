@@ -1,6 +1,6 @@
 package com.terraformersmc.biolith.impl.mixin;
 
-import com.terraformersmc.biolith.api.biome.BiolithFittestNodes;
+import com.terraformersmc.biolith.impl.biome.BiolithFittestNodes;
 import com.terraformersmc.biolith.impl.biome.BiomeCoordinator;
 import com.terraformersmc.biolith.impl.compat.VanillaCompat;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -30,12 +30,10 @@ public abstract class MixinTBTheEndBiomeSource extends BiomeSource {
     @Unique
     private static final ThreadLocal<Boolean> bypass = ThreadLocal.withInitial(() -> false);
 
-    @Override
     public boolean biolith$getBypass() {
         return bypass.get();
     }
 
-    @Override
     public void biolith$setBypass(boolean value) {
         bypass.set(value);
     }

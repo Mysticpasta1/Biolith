@@ -1,3 +1,4 @@
+
 package com.terraformersmc.biolith.impl.platform;
 
 import com.mojang.brigadier.CommandDispatcher;

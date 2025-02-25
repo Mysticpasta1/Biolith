@@ -27,7 +27,7 @@ public abstract class MixinMBBiomeSource extends BiomeSource {
     public @Nullable MultiNoiseUtil.Entries<RegistryEntry<Biome>> biolith$getBiomeEntries() {
         return new MultiNoiseUtil.Entries<>(this.getBiomes().stream().map(
                 biomeEntry -> Pair.of(DimensionBiomePlacement.OUT_OF_RANGE, biomeEntry)
-                ).toList());
+        ).toList());
     }
 
     @WrapOperation(method = {"getBiome", "getOceanBiome", "getDeepOceanBiome", "getCaveBiome", "getBiomeForSpawn"},
@@ -40,7 +40,7 @@ public abstract class MixinMBBiomeSource extends BiomeSource {
     private RegistryEntry<Biome> biolith$getBiome(BiomeProvider instance, int biomeX, int biomeY, int biomeZ, Operation<RegistryEntry<Biome>> operation) {
         RegistryEntry<Biome> original = operation.call(instance, biomeX, biomeY, biomeZ);
 
-        return BiomeCoordinator.OVERWORLD.getReplacementEntry(biomeX, biomeY, biomeZ, original);
+        return BiomeCoordinator.OVERWORLD.getDirectReplacement(biomeX, biomeY, biomeZ, original);
     }
 
     @WrapOperation(method = {"getBiomeForSpawn", "getBiomeForSurfaceGen"},
@@ -56,7 +56,7 @@ public abstract class MixinMBBiomeSource extends BiomeSource {
         int biomeY = y >> 2;
         int biomeZ = z >> 2;
 
-        return BiomeCoordinator.OVERWORLD.getReplacementEntry(biomeX, biomeY, biomeZ, original);
+        return BiomeCoordinator.OVERWORLD.getDirectReplacement(biomeX, biomeY, biomeZ, original);
     }
 
     @ModifyReturnValue(method = "biomeStream", at = @At("RETURN"))
