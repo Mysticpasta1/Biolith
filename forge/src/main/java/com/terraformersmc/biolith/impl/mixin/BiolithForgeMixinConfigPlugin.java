@@ -16,8 +16,8 @@ public class BiolithForgeMixinConfigPlugin implements IMixinConfigPlugin {
     private static final Supplier<Boolean> TRUE = () -> true;
 
     private static final Map<String, Supplier<Boolean>> CONDITIONS = ImmutableMap.of(
-            "com.terraformersmc.biolith.impl.mixin.MixinTBTheEndBiomeSource", () -> ModList.get().isLoaded("terrablender")
-    );
+            "com.terraformersmc.biolith.impl.mixin.MixinTBTheEndBiomeSource", () -> ModList.get()
+                    != null && ModList.get().isLoaded("terrablender"));
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
