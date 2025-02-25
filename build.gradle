@@ -14,22 +14,17 @@ subprojects {
 
     dependencies {
         minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
-        mappings loom.layered {
-            it.mappings("net.fabricmc:yarn:${rootProject.yarn_mappings}:v2")
-        }
+        mappings("net.fabricmc:yarn:${rootProject.yarn_mappings}:v2")
     }
 }
-
-// Ferry for publishing; this has to be after arch dev plugin apply and before subproject version is set.
-apply from: 'https://raw.githubusercontent.com/TerraformersMC/GradleScripts/3.0-beta/ferry-mpp.gradle'
 
 allprojects {
     apply plugin: "java"
     apply plugin: "architectury-plugin"
     apply plugin: "maven-publish"
 
+    version = rootProject.mod_version
     group = rootProject.maven_group
-    version = rootProject.version
 
     repositories {
         mavenCentral()
