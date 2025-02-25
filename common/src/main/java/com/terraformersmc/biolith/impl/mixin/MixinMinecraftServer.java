@@ -5,36 +5,29 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.terraformersmc.biolith.impl.biome.BiomeCoordinator;
 import com.terraformersmc.biolith.impl.surface.SurfaceRuleCollector;
-import net.minecraft.registry.CombinedDynamicRegistries;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.ServerDynamicRegistryType;
+import net.minecraft.registry.*;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.WorldGenerationProgressListener;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.random.RandomSequencesState;
 import net.minecraft.world.World;
 import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.dimension.DimensionType;
 import net.minecraft.world.dimension.DimensionTypes;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
 import net.minecraft.world.gen.chunk.ChunkGeneratorSettings;
 import net.minecraft.world.gen.chunk.NoiseChunkGenerator;
 import net.minecraft.world.gen.surfacebuilder.MaterialRules;
 import net.minecraft.world.level.ServerWorldProperties;
-import net.minecraft.world.level.storage.LevelStorage;
-import org.jetbrains.annotations.Nullable;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.Executor;
 import java.util.stream.Stream;
 
 @Mixin(MinecraftServer.class)
@@ -57,40 +50,39 @@ public abstract class MixinMinecraftServer {
         return original.call(instance);
     }
 
-    @WrapOperation(method = "createWorlds", at = @At(
-            value = "NEW",
-            target = "net/minecraft/server/world/ServerWorld"
-    ))
-    @SuppressWarnings("unused")
-    private ServerWorld biolith$prependSurfaceRules(MinecraftServer server, Executor workerExecutor, LevelStorage.Session session, ServerWorldProperties properties, RegistryKey<World> worldKey, DimensionOptions dimensionOptions, WorldGenerationProgressListener worldGenerationProgressListener, boolean debugWorld, long seed, List spawners, boolean shouldTickTime, @Nullable RandomSequencesState randomSequencesState, Operation<ServerWorld> operation) {
-        Optional<RegistryKey<DimensionType>> dimensionKey = dimensionOptions.dimensionTypeEntry().getKey();
+    @Inject(method = "createWorlds", at = @At(value = "RETURN"), locals = LocalCapture.CAPTURE_FAILHARD)
+    private void biolith$prependSurfaceRules(WorldGenerationProgressListener worldGenerationProgressListener, CallbackInfo ci, ServerWorldProperties serverWorldProperties, boolean isDebug, Registry<DimensionOptions> dimensionOptionsRegistry) {
         MaterialRules.MaterialRule[] rulesType = new MaterialRules.MaterialRule[0];
-        SurfaceRuleCollector surfaceRuleCollector = null;
 
-        if (dimensionKey.isPresent()) {
-            if (DimensionTypes.OVERWORLD.equals(dimensionKey.get())) {
+        for (World world : worlds.values()) {
+            DimensionOptions dimensionOptions = null;
+            SurfaceRuleCollector surfaceRuleCollector = null;
+
+            // TODO: Consider whether we need to guard against modifying the same ChunkGeneratorSettings more than once...
+            if (DimensionTypes.OVERWORLD.equals(world.getDimensionKey())) {
+                dimensionOptions = dimensionOptionsRegistry.get(DimensionOptions.OVERWORLD);
                 surfaceRuleCollector = SurfaceRuleCollector.OVERWORLD;
-            } else if (DimensionTypes.THE_NETHER.equals(dimensionKey.get())) {
+            } else if (DimensionTypes.THE_NETHER.equals(world.getDimensionKey())) {
+                dimensionOptions = dimensionOptionsRegistry.get(DimensionOptions.NETHER);
                 surfaceRuleCollector = SurfaceRuleCollector.NETHER;
-            } else if (DimensionTypes.THE_END.equals(dimensionKey.get())) {
+            } else if (DimensionTypes.THE_END.equals(world.getDimensionKey())) {
+                dimensionOptions = dimensionOptionsRegistry.get(DimensionOptions.END);
                 surfaceRuleCollector = SurfaceRuleCollector.END;
             }
-        }
 
-        // TODO: Consider whether we need to guard against modifying the same ChunkGeneratorSettings more than once...
-        if (surfaceRuleCollector != null && surfaceRuleCollector.getRuleCount() > 0) {
-            ChunkGenerator chunkGenerator = dimensionOptions.chunkGenerator();
-            if (chunkGenerator instanceof NoiseChunkGenerator noiseChunkGenerator) {
-                ChunkGeneratorSettings chunkGeneratorSettings = noiseChunkGenerator.getSettings().value();
+            if (dimensionOptions != null && surfaceRuleCollector.getRuleCount() > 0) {
+                ChunkGenerator chunkGenerator = dimensionOptions.chunkGenerator();
+                //ChunkGenerator chunkGenerator = ((ServerChunkManager) world.getChunkManager()).threadedAnvilChunkStorage.chunkGenerator;
+                if (chunkGenerator instanceof NoiseChunkGenerator noiseChunkGenerator) {
+                    ChunkGeneratorSettings chunkGeneratorSettings = noiseChunkGenerator.getSettings().value();
 
-                ((MixinChunkGeneratorSettings)(Object) chunkGeneratorSettings).biolith$setSurfaceRule(
-                        MaterialRules.sequence(Streams.concat(
-                                        Arrays.stream(surfaceRuleCollector.getAll()),
-                                        Stream.of(chunkGeneratorSettings.surfaceRule()))
-                                .toList().toArray(rulesType)));
+                    ((MixinChunkGeneratorSettings)(Object) chunkGeneratorSettings).biolith$setSurfaceRule(
+                            MaterialRules.sequence(Streams.concat(
+                                            Arrays.stream(surfaceRuleCollector.getAll()),
+                                            Stream.of(chunkGeneratorSettings.surfaceRule()))
+                                    .toList().toArray(rulesType)));
+                }
             }
         }
-
-        return operation.call(server, workerExecutor, session, properties, worldKey, dimensionOptions, worldGenerationProgressListener, debugWorld, seed, spawners, shouldTickTime, randomSequencesState);
     }
 }

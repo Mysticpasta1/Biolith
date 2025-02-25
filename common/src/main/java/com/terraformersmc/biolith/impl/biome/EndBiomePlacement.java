@@ -7,20 +7,24 @@ import com.terraformersmc.biolith.impl.noise.OpenSimplexNoise2;
 import net.minecraft.registry.RegistryEntryLookup;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeKeys;
 import net.minecraft.world.biome.source.BiomeCoords;
 import net.minecraft.world.biome.source.util.MultiNoiseUtil;
 import net.minecraft.world.gen.densityfunction.DensityFunction;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.function.Consumer;
 
 public class EndBiomePlacement extends DimensionBiomePlacement {
     private final double[] scale = new double[4];
 
-    public MultiNoiseUtil.SearchTree.TreeLeafNode<RegistryEntry<Biome>> nodeTheEnd;
+    private final MultiNoiseUtil.NoiseHypercube noiseSmallEndIslands = new MultiNoiseUtil.NoiseHypercube(DEFAULT_PARAMETER, DEFAULT_PARAMETER, DEFAULT_PARAMETER, MultiNoiseUtil.ParameterRange.of(-1f, -0.21875f), DEFAULT_PARAMETER, DEFAULT_PARAMETER, 0L);
+    private final MultiNoiseUtil.NoiseHypercube noiseEndBarrens      = new MultiNoiseUtil.NoiseHypercube(DEFAULT_PARAMETER, DEFAULT_PARAMETER, DEFAULT_PARAMETER, MultiNoiseUtil.ParameterRange.of(-0.21875f, -0.0625f), DEFAULT_PARAMETER, DEFAULT_PARAMETER, 0L);
+    private final MultiNoiseUtil.NoiseHypercube noiseEndMidlands     = new MultiNoiseUtil.NoiseHypercube(DEFAULT_PARAMETER, DEFAULT_PARAMETER, DEFAULT_PARAMETER, MultiNoiseUtil.ParameterRange.of(-0.0625f, 0.25f), DEFAULT_PARAMETER, DEFAULT_PARAMETER, 0L);
+    private final MultiNoiseUtil.NoiseHypercube noiseEndHighlands    = new MultiNoiseUtil.NoiseHypercube(DEFAULT_PARAMETER, DEFAULT_PARAMETER, DEFAULT_PARAMETER, MultiNoiseUtil.ParameterRange.of(0.25f, 1f), DEFAULT_PARAMETER, DEFAULT_PARAMETER, 0L);
+
     public MultiNoiseUtil.SearchTree.TreeLeafNode<RegistryEntry<Biome>> nodeSmallEndIslands;
     public MultiNoiseUtil.SearchTree.TreeLeafNode<RegistryEntry<Biome>> nodeEndBarrens;
     public MultiNoiseUtil.SearchTree.TreeLeafNode<RegistryEntry<Biome>> nodeEndMidlands;
@@ -41,35 +45,20 @@ public class EndBiomePlacement extends DimensionBiomePlacement {
     }
 
     @Override
-    protected void serverReplaced(@NotNull BiolithState state, long seed) {
+    protected void serverReplaced(BiolithState state, long seed) {
         super.serverReplaced(state, seed);
 
-        // Update vanilla biome entries for the End
         RegistryEntryLookup<Biome> biomeEntryGetter = BiomeCoordinator.getBiomeLookupOrThrow();
-        nodeTheEnd          = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(OUT_OF_RANGE,                                      biomeEntryGetter.getOrThrow(BiomeKeys.THE_END));
-        nodeSmallEndIslands = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(VanillaEndBiomeParameters.NOISE_SMALL_END_ISLANDS, biomeEntryGetter.getOrThrow(BiomeKeys.SMALL_END_ISLANDS));
-        nodeEndBarrens      = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(VanillaEndBiomeParameters.NOISE_END_BARRENS,       biomeEntryGetter.getOrThrow(BiomeKeys.END_BARRENS));
-        nodeEndMidlands     = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(VanillaEndBiomeParameters.NOISE_END_MIDLANDS,      biomeEntryGetter.getOrThrow(BiomeKeys.END_MIDLANDS));
-        nodeEndHighlands    = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(VanillaEndBiomeParameters.NOISE_END_HIGHLANDS,     biomeEntryGetter.getOrThrow(BiomeKeys.END_HIGHLANDS));
+        nodeSmallEndIslands = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(noiseSmallEndIslands, biomeEntryGetter.getOrThrow(BiomeKeys.SMALL_END_ISLANDS));
+        nodeEndBarrens      = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(noiseEndBarrens,      biomeEntryGetter.getOrThrow(BiomeKeys.END_BARRENS));
+        nodeEndMidlands     = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(noiseEndMidlands,     biomeEntryGetter.getOrThrow(BiomeKeys.END_MIDLANDS));
+        nodeEndHighlands    = new MultiNoiseUtil.SearchTree.TreeLeafNode<>(noiseEndHighlands,    biomeEntryGetter.getOrThrow(BiomeKeys.END_HIGHLANDS));
 
-        // Seed the End simplex noises based on the game seed
         humidityNoise    = new OpenSimplexNoise2(seedlets[7]);
         temperatureNoise = new OpenSimplexNoise2(seedlets[5]);
         weirdnessNoise   = new OpenSimplexNoise2(seedlets[3]);
     }
 
-    @Override
-    protected void serverStopped() {
-        super.serverStopped();
-
-        nodeTheEnd = null;
-        nodeSmallEndIslands = null;
-        nodeEndBarrens = null;
-        nodeEndMidlands = null;
-        nodeEndHighlands = null;
-    }
-
-    @Override
     public double getLocalNoise(int x, int y, int z) {
         double localNoise;
 
@@ -85,14 +74,39 @@ public class EndBiomePlacement extends DimensionBiomePlacement {
         return localNoise;
     }
 
-    // TODO: Should use DimensionBiomePlacement method instead,
-    //       but availability of biomeEntryGetter must be thoroughly validated first.
+    public void writeBiomeEntries(Consumer<Pair<MultiNoiseUtil.NoiseHypercube, RegistryEntry<Biome>>> parameters) {
+        biomesInjected = true;
+        RegistryEntryLookup<Biome> biomeEntryGetter = BiomeCoordinator.getBiomeLookupOrThrow();
+
+        // End biomes are merged during construction of the End Biome stream.
+
+        placementRequests.forEach(pair -> parameters.accept(pair.mapSecond(biomeEntryGetter::getOrThrow)));
+
+        // Replacement biomes are placed out-of-range so they do not generate except as replacements.
+        // This adds the biome to TheEndBiomeSource and BiomeSource so features and structures will place.
+
+        replacementRequests.values().stream()
+                .flatMap(requestSet -> requestSet.requests.stream())
+                .map(ReplacementRequest::biome).distinct()
+                .forEach(biome -> {
+                    if (!biome.equals(VANILLA_PLACEHOLDER)) {
+                        parameters.accept(Pair.of(OUT_OF_RANGE, biomeEntryGetter.getOrThrow(biome)));
+                    }
+                });
+
+        subBiomeRequests.values().stream()
+                .flatMap(requestSet -> requestSet.requests.stream())
+                .map(SubBiomeRequest::biome).distinct()
+                .forEach(biome -> parameters.accept(Pair.of(OUT_OF_RANGE, biomeEntryGetter.getOrThrow(biome))));
+    }
+
+    // TODO: Deprecated for clean-up in the mixins -- Review and remove from all DimensionBiomePlacements?
     public void writeBiomeParameters(Consumer<Pair<MultiNoiseUtil.NoiseHypercube, RegistryKey<Biome>>> parameters) {
         biomesInjected = true;
 
         // End biomes are merged during construction of the End Biome stream.
 
-        placementRequests.forEach(request -> parameters.accept(request.pair()));
+        placementRequests.forEach(parameters);
 
         // Replacement biomes are placed out-of-range so they do not generate except as replacements.
         // This adds the biome to TheEndBiomeSource and BiomeSource so features and structures will place.
@@ -115,9 +129,9 @@ public class EndBiomePlacement extends DimensionBiomePlacement {
     // TODO: This should be replaced with a more robust noise implementation, perhaps also more similar to vanilla.
     public MultiNoiseUtil.NoiseValuePoint sampleEndNoise(int x, int y, int z, MultiNoiseUtil.MultiNoiseSampler originalNoise, RegistryEntry<Biome> originalBiome) {
         double erosion = originalNoise.erosion().sample(new DensityFunction.UnblendedNoisePos(
-                BiomeCoords.toBlock(x),
+                (ChunkSectionPos.getSectionCoord(BiomeCoords.toBlock(x)) * 2 + 1) * 8,
                 BiomeCoords.toBlock(y),
-                BiomeCoords.toBlock(z)
+                (ChunkSectionPos.getSectionCoord(BiomeCoords.toBlock(z)) * 2 + 1) * 8
         ));
 
         return new MultiNoiseUtil.NoiseValuePoint(

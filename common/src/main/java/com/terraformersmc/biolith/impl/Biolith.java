@@ -1,6 +1,5 @@
 package com.terraformersmc.biolith.impl;
 
-import com.terraformersmc.biolith.impl.biome.sub.BiolithCriteria;
 import com.terraformersmc.biolith.impl.commands.BiolithCommands;
 import com.terraformersmc.biolith.impl.compat.BiolithCompat;
 import com.terraformersmc.biolith.impl.config.BiolithConfigManager;
@@ -19,7 +18,6 @@ public class Biolith {
 
         BiolithCompat.init();
         BiolithCommands.init();
-        BiolithCriteria.init();
     }
 
     public static BiolithConfigManager getConfigManager() {

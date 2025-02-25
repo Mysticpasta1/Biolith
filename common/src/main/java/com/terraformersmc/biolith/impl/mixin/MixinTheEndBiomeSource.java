@@ -5,7 +5,6 @@ import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.datafixers.util.Pair;
-import com.terraformersmc.biolith.api.biome.BiolithFittestNodes;
 import com.terraformersmc.biolith.impl.biome.*;
 import com.terraformersmc.biolith.impl.compat.BiolithCompat;
 import com.terraformersmc.biolith.impl.compat.VanillaCompat;
@@ -17,7 +16,6 @@ import net.minecraft.world.biome.source.BiomeSource;
 import net.minecraft.world.biome.source.TheEndBiomeSource;
 import net.minecraft.world.biome.source.util.MultiNoiseUtil;
 import net.minecraft.world.gen.densityfunction.DensityFunction;
-import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -25,20 +23,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Stream;
 
-@Mixin(value = TheEndBiomeSource.class, priority = 990)
+@Mixin(TheEndBiomeSource.class)
 public abstract class MixinTheEndBiomeSource extends BiomeSource {
     private static RegistryEntryLookup<Biome> biolith$biomeLookup;
     private static MultiNoiseUtil.Entries<RegistryEntry<Biome>> biolith$biomeEntries;
 
     @Inject(method = "createVanilla", at = @At("HEAD"))
     private static void biolith$getRegistry(RegistryEntryLookup<Biome> biomeLookup, CallbackInfoReturnable<TheEndBiomeSource> cir) {
-        if (!biomeLookup.equals(biolith$biomeLookup)) {
-            biolith$biomeLookup = biomeLookup;
-            biolith$biomeEntries = null;
-        }
+        biolith$biomeLookup = biomeLookup;
     }
 
     @ModifyReturnValue(method = "biomeStream", at = @At("RETURN"))
@@ -51,42 +45,30 @@ public abstract class MixinTheEndBiomeSource extends BiomeSource {
 
         // Wrapping END.writeBiomeParameters() like this allows us to use the same interface there as we do for OVERWORLD.
         // So it looks kind of silly here, but it works fine and makes the code in the main biome placement classes alike.
+        DynamicRegistryManager.Immutable registryManager = BiomeCoordinator.getRegistryManager();
+        List<Pair<MultiNoiseUtil.NoiseHypercube, RegistryKey<Biome>>> parameterList = new ArrayList<>(64);
 
-        synchronized (this) {
-            // Only compute this once, since our version is more expensive than Mojang's.
-            if (biolith$biomeEntries == null) {
-                List<Pair<MultiNoiseUtil.NoiseHypercube, RegistryKey<Biome>>> parameterList = new ArrayList<>(64);
+        // Fallback lookup just in case.
+        if (biolith$biomeLookup == null) {
+            assert (registryManager != null);
+            biolith$biomeLookup = registryManager.getWrapperOrThrow(RegistryKeys.BIOME);
+        }
 
-                // Fallback lookup just in case.
-                if (biolith$biomeLookup == null) {
-                    DynamicRegistryManager.Immutable registryManager = BiomeCoordinator.getRegistryManager();
-                    Objects.requireNonNull(registryManager);
+        // Generate "Vanilla" and modded parameters list.
+        VanillaEndBiomeParameters.writeEndBiomeParameters(parameterList::add);
+        BiomeCoordinator.END.writeBiomeParameters(parameterList::add);
 
-                    biolith$biomeLookup = registryManager.getWrapperOrThrow(RegistryKeys.BIOME);
-                }
-
-                // Generate vanilla parameters list.
-                VanillaEndBiomeParameters.writeEndBiomeParameters(parameterList::add);
-
-                // Remove any biomes matching removals.
-                parameterList.removeIf(entry ->
-                        !BiomeCoordinator.END.removalFilter(entry.mapSecond((key) -> biolith$biomeLookup.getOrThrow(key))));
-
-                // Add all biomes from additions, replacements, and sub-biome requests.
-                BiomeCoordinator.END.writeBiomeParameters(parameterList::add);
-
-                // Create a multi-noise parameter entries object.
-                biolith$biomeEntries = new MultiNoiseUtil.Entries<>(parameterList.stream()
-                        .map(pair -> pair.mapSecond(key -> (RegistryEntry<Biome>) biolith$biomeLookup.getOrThrow(key)))
-                        .toList());
-            }
+        // Create a multi-noise parameter entries object.
+        if (biolith$biomeEntries == null) {
+            biolith$biomeEntries = new MultiNoiseUtil.Entries<>(parameterList.stream()
+                    .map(pair -> pair.mapSecond((key) -> (RegistryEntry<Biome>) biolith$biomeLookup.getOrThrow(key)))
+                    .toList());
         }
 
         // Output the registry entry stream (nominally the purpose of this method).
-        // Include the original entries in case another mod has appended to them.
         return Streams.concat(
                 original,
-                biolith$biomeEntries.getEntries().stream().map(Pair::getSecond)
+                parameterList.stream().map(pair -> biolith$biomeLookup.getOrThrow(pair.getSecond()))
             ).distinct();
     }
 
@@ -100,7 +82,7 @@ public abstract class MixinTheEndBiomeSource extends BiomeSource {
         MultiNoiseUtil.NoiseValuePoint noisePoint = BiomeCoordinator.END.sampleEndNoise(x, y, z, noise, original);
 
         // Select noise biome
-        BiolithFittestNodes<RegistryEntry<Biome>> fittestNodes = VanillaCompat.getEndBiome(noisePoint, this.biolith$getBiomeEntries(), original);
+        BiolithFittestNodes<RegistryEntry<Biome>> fittestNodes = VanillaCompat.getEndBiome(noisePoint, biolith$biomeEntries, original);
 
         // Process any replacements or sub-biomes.
         return BiomeCoordinator.END.getReplacement(x, y, z, noisePoint, fittestNodes);
@@ -118,16 +100,7 @@ public abstract class MixinTheEndBiomeSource extends BiomeSource {
     }
 
     @Override
-    public @NotNull MultiNoiseUtil.Entries<RegistryEntry<Biome>> biolith$getBiomeEntries() {
-        // I don't know why this hasn't always happened already, but sometimes it hasn't...
-        if (biolith$biomeEntries == null) {
-            this.biomeStream();
-
-            if (biolith$biomeEntries == null) {
-                throw new IllegalStateException("biolith$biomeEntries is null after call to " + this.getClass().getCanonicalName() + ".biomeStream()");
-            }
-        }
-
+    public MultiNoiseUtil.Entries<RegistryEntry<Biome>> biolith$getBiomeEntries() {
         return biolith$biomeEntries;
     }
 }

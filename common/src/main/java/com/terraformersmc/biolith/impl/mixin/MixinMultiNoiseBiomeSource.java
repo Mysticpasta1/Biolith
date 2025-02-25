@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.datafixers.util.Either;
 import com.mojang.datafixers.util.Pair;
-import com.terraformersmc.biolith.api.biome.BiolithFittestNodes;
+import com.terraformersmc.biolith.impl.biome.BiolithFittestNodes;
 import com.terraformersmc.biolith.impl.biome.BiomeCoordinator;
 import com.terraformersmc.biolith.impl.compat.BiolithCompat;
 import com.terraformersmc.biolith.impl.compat.VanillaCompat;
@@ -52,24 +52,14 @@ public abstract class MixinMultiNoiseBiomeSource extends BiomeSource {
                 if (this.biolith$getDimensionType().matchesKey(DimensionTypes.OVERWORLD)) {
                     List<Pair<MultiNoiseUtil.NoiseHypercube, RegistryEntry<Biome>>> parameterList = new ArrayList<>(256);
 
-                    // Remove any biomes matching removals
-                    originalEntries.getEntries().stream()
-                            .filter(BiomeCoordinator.OVERWORLD::removalFilter)
-                            .forEach(parameterList::add);
-
-                    // Add all biomes from additions, replacements, and sub-biome requests
+                    parameterList.addAll(originalEntries.getEntries());
                     BiomeCoordinator.OVERWORLD.writeBiomeEntries(parameterList::add);
 
                     biolith$biomeEntries = new MultiNoiseUtil.Entries<>(parameterList);
                 } else if (this.biolith$getDimensionType().matchesKey(DimensionTypes.THE_NETHER)) {
                     List<Pair<MultiNoiseUtil.NoiseHypercube, RegistryEntry<Biome>>> parameterList = new ArrayList<>(64);
 
-                    // Remove any biomes matching removals
-                    originalEntries.getEntries().stream()
-                            .filter(BiomeCoordinator.NETHER::removalFilter)
-                            .forEach(parameterList::add);
-
-                    // Add all biomes from additions, replacements, and sub-biome requests
+                    parameterList.addAll(originalEntries.getEntries());
                     BiomeCoordinator.NETHER.writeBiomeEntries(parameterList::add);
 
                     biolith$biomeEntries = new MultiNoiseUtil.Entries<>(parameterList);

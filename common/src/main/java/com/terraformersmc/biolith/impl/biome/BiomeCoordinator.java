@@ -26,10 +26,6 @@ public class BiomeCoordinator {
     private static boolean serverStarted = false;
     protected static DynamicRegistryManager.Immutable registryManager;
 
-    public static boolean isServerStarted() {
-        return serverStarted;
-    }
-
     public static void setRegistryManager(CombinedDynamicRegistries<ServerDynamicRegistryType> combinedDynamicRegistries) {
         // Called by biolith$earlyCaptureRegistries() in MixinMinecraftServer and MixinServerLoader so we can set this really early.
         registryManager = combinedDynamicRegistries.getCombinedRegistryManager();
