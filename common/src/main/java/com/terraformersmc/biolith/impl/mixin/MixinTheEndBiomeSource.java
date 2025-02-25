@@ -62,7 +62,7 @@ public abstract class MixinTheEndBiomeSource extends BiomeSource {
                     DynamicRegistryManager.Immutable registryManager = BiomeCoordinator.getRegistryManager();
                     Objects.requireNonNull(registryManager);
 
-                    biolith$biomeLookup = registryManager.getOrThrow(RegistryKeys.BIOME);
+                    biolith$biomeLookup = registryManager.getWrapperOrThrow(RegistryKeys.BIOME);
                 }
 
                 // Generate vanilla parameters list.

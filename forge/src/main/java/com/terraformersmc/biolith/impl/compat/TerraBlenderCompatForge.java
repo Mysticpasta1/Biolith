@@ -57,8 +57,7 @@ public class TerraBlenderCompatForge implements TerraBlenderCompat {
     public void registerSurfaceRules() {
         Map.of(
                 SurfaceRuleCollector.OVERWORLD, SurfaceRuleManager.RuleCategory.OVERWORLD,
-                SurfaceRuleCollector.NETHER,    SurfaceRuleManager.RuleCategory.NETHER,
-                SurfaceRuleCollector.END,       SurfaceRuleManager.RuleCategory.END
+                SurfaceRuleCollector.NETHER,    SurfaceRuleManager.RuleCategory.NETHER
         ).forEach((biolithRules, terrablenderRuleCategory) -> {
             if (biolithRules.getRuleCount() > 0) {
                 for (Identifier ruleOwner : biolithRules.getRuleOwners()) {

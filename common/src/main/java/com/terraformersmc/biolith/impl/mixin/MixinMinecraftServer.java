@@ -23,7 +23,6 @@ import net.minecraft.world.gen.chunk.NoiseChunkGenerator;
 import net.minecraft.world.gen.surfacebuilder.MaterialRules;
 import net.minecraft.world.level.ServerWorldProperties;
 import net.minecraft.world.level.storage.LevelStorage;
-import net.minecraft.world.spawner.SpecialSpawner;
 import org.jetbrains.annotations.Nullable;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Final;
@@ -63,7 +62,7 @@ public abstract class MixinMinecraftServer {
             target = "net/minecraft/server/world/ServerWorld"
     ))
     @SuppressWarnings("unused")
-    private ServerWorld biolith$prependSurfaceRules(MinecraftServer server, Executor workerExecutor, LevelStorage.Session session, ServerWorldProperties properties, RegistryKey<World> worldKey, DimensionOptions dimensionOptions, WorldGenerationProgressListener worldGenerationProgressListener, boolean debugWorld, long seed, List<SpecialSpawner> spawners, boolean shouldTickTime, @Nullable RandomSequencesState randomSequencesState, Operation<ServerWorld> operation) {
+    private ServerWorld biolith$prependSurfaceRules(MinecraftServer server, Executor workerExecutor, LevelStorage.Session session, ServerWorldProperties properties, RegistryKey<World> worldKey, DimensionOptions dimensionOptions, WorldGenerationProgressListener worldGenerationProgressListener, boolean debugWorld, long seed, List spawners, boolean shouldTickTime, @Nullable RandomSequencesState randomSequencesState, Operation<ServerWorld> operation) {
         Optional<RegistryKey<DimensionType>> dimensionKey = dimensionOptions.dimensionTypeEntry().getKey();
         MaterialRules.MaterialRule[] rulesType = new MaterialRules.MaterialRule[0];
         SurfaceRuleCollector surfaceRuleCollector = null;

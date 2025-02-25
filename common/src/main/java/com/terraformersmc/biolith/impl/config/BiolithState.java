@@ -1,20 +1,21 @@
 package com.terraformersmc.biolith.impl.config;
 
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.terraformersmc.biolith.impl.Biolith;
+import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.NbtString;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
 import net.minecraft.world.biome.Biome;
 
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -23,71 +24,77 @@ public class BiolithState extends PersistentState {
     private final LinkedHashMap<RegistryKey<Biome>, LinkedHashSet<RegistryKey<Biome>>> biomeReplacements = new LinkedHashMap<>(64);
     private final ServerWorld world;
 
-    private static <E> Codec<LinkedHashSet<E>> getLinkedHashSetCodec(Codec<E> entryCodec) {
-        return entryCodec.listOf().xmap(LinkedHashSet::new, lhs -> lhs.stream().toList());
+    private final String stateId;
+    private static final int STATE_VERSION = 0;
+
+    public BiolithState(ServerWorld world) {
+        // All the 'the_'s annoy me so I don't use this one.  :P
+        this(world, world.getDimensionKey().getValue().getPath());
     }
 
-    public static Codec<BiolithState> getCodec(PersistentState.Context context) {
-        return RecordCodecBuilder.create(
-                (instance) -> instance.group(
-                                Codec.unboundedMap(RegistryKey.createCodec(RegistryKeys.BIOME), getLinkedHashSetCodec(RegistryKey.createCodec(RegistryKeys.BIOME))).optionalFieldOf("biome_replacements", Map.of())
-                                        .forGetter(biolithState -> biolithState.biomeReplacements),
-                                getLinkedHashSetCodec(RegistryKey.createCodec(RegistryKeys.BIOME)).listOf().optionalFieldOf("BiomeReplacementsList", List.of())
-                                        .forGetter(biolithState -> List.of())
-                        )
-                        .apply(instance, (replacements, biomeReplacementsList) -> {
-                            if (!replacements.isEmpty()) {
-                                return unmarshall_v1(context, replacements);
-                            } else if (!biomeReplacementsList.isEmpty()) {
-                                return unmarshall_v0(context, biomeReplacementsList);
-                            } else {
-                                return new BiolithState(context);
-                            }
-                        }));
+    public BiolithState(ServerWorld serverWorld, String name) {
+        // Make sure we've got the server world stowed for state loads/saves.
+        world = serverWorld;
+        stateId = Biolith.MOD_ID + "_" + name + "_state";
+        world.getPersistentStateManager().set(stateId, this);
+        this.readState();
     }
 
-    public static PersistentStateType<BiolithState> getPersistentStateType(String name) {
-        return new PersistentStateType<>(
-                Biolith.MOD_ID + "_" + name + "_state",
-                BiolithState::new,
-                BiolithState::getCodec,
-                null
-        );
-    }
-
-    public BiolithState(PersistentState.Context context) {
-        this.world = context.getWorldOrThrow();
-    }
-
-    // Legacy unmarshaller for upgrading from v0 to v1
-    // Each map was stored as a flat ordered list with the key in position 0.
-    private static BiolithState unmarshall_v0(PersistentState.Context context, List<LinkedHashSet<RegistryKey<Biome>>> biomeReplacementsList) {
-        BiolithState state = new BiolithState(context);
-
-        state.biomeReplacements.clear();
-        biomeReplacementsList.forEach(list -> {
-            RegistryKey<Biome> key = list.removeFirst();
-            state.biomeReplacements.put(key, new LinkedHashSet<>(list));
-        });
-
-        // Re-write the state in v1 format
-        state.markDirty();
-
-        return state;
-    }
-
-    private static BiolithState unmarshall_v1(PersistentState.Context context, Map<RegistryKey<Biome>, LinkedHashSet<RegistryKey<Biome>>> replacements) {
-        BiolithState state = new BiolithState(context);
-
-        state.biomeReplacements.clear();
-        state.biomeReplacements.putAll(replacements);
-
-        return state;
-    }
-
-    public void write() {
+    private void writeState() {
         this.markDirty();
         world.getPersistentStateManager().save();
+    }
+
+    private void readState() {
+        NbtCompound nbt = null;
+        NbtCompound nbtState = null;
+
+        try {
+            nbt = world.getPersistentStateManager().readNbt(stateId, STATE_VERSION);
+        } catch (IOException e) {
+            Biolith.LOGGER.debug("No saved state found for {}; starting anew...", stateId);
+        }
+        if (nbt != null && nbt.contains("data")) {
+            int nbtVersion = nbt.getInt("DataVersion");
+            nbtState = nbt.getCompound("data");
+        }
+
+        biomeReplacements.clear();
+        if (nbtState != null && !nbtState.isEmpty()) {
+            NbtList biomeReplacementsNbt = nbtState.getList("BiomeReplacementsList", NbtList.LIST_TYPE);
+            biomeReplacementsNbt.forEach(nbtElement -> {
+                NbtList replacementsNbt = (NbtList) nbtElement.copy();
+                Identifier elementId = Identifier.tryParse(replacementsNbt.getString(0));
+                if (elementId == null) {
+                    Biolith.LOGGER.warn("{}: Failed to parse target biome identifier from NBT: {}", stateId, replacementsNbt.getString(0));
+                } else if (replacementsNbt.size() < 2) {
+                    Biolith.LOGGER.warn("{}: Replacements list from NBT contains no replacements: {}", stateId, replacementsNbt.getString(0));
+                } else {
+                    RegistryKey<Biome> target = RegistryKey.of(RegistryKeys.BIOME, elementId);
+                    replacementsNbt.remove(0);
+                    biomeReplacements.put(target, replacementsNbt.stream()
+                            .map(element -> Identifier.tryParse(element.asString())).filter(Objects::nonNull)
+                            .map(id -> RegistryKey.of(RegistryKeys.BIOME, id))
+                            .collect(Collectors.toCollection(LinkedHashSet::new)));
+                    Biolith.LOGGER.debug("{}: Resolved replacements list from NBT: {} -> {}", stateId, target.getValue(), biomeReplacements.get(target).stream().map(RegistryKey::getValue).toList());
+                }
+            });
+        }
+    }
+
+    @Override
+    public NbtCompound writeNbt(NbtCompound nbt) {
+        NbtList biomeReplacementsNbt = new NbtList();
+        biomeReplacements.forEach((target, replacements) -> {
+            NbtList replacementsNbt = new NbtList();
+            replacementsNbt.add(NbtString.of(target.getValue().toString()));
+            replacementsNbt.addAll(replacements.stream().map(replacement -> NbtString.of(replacement.getValue().toString())).toList());
+            biomeReplacementsNbt.add(replacementsNbt);
+        });
+        Biolith.LOGGER.debug("{}: Describing biome replacemnts NBT:\n{}", stateId, biomeReplacementsNbt);
+        nbt.put("BiomeReplacementsList", biomeReplacementsNbt);
+
+        return nbt;
     }
 
     public Stream<RegistryKey<Biome>> getBiomeReplacements(RegistryKey<Biome> target) {
@@ -106,17 +113,5 @@ public class BiolithState extends PersistentState {
         }
 
         this.markDirty();
-    }
-
-    public Identifier getDimensionId() {
-        if (world.getDimensionEntry().getKey().isEmpty()) {
-            return Identifier.of("biolith", "unregistered_dimension");
-        }
-
-        return world.getDimensionEntry().getKey().get().getValue();
-    }
-
-    public Identifier getWorldId() {
-        return world.getRegistryKey().getValue();
     }
 }

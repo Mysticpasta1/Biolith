@@ -36,7 +36,7 @@ public class SurfaceGenerationLoader extends SinglePreparationResourceReloader<L
             for (Map.Entry<Identifier, Resource> entry : SURFACE_GENERATION_FINDER.findResources(manager).entrySet()) {
                 Resource resource = entry.getValue();
 
-                profiler.push(resource.getPackId());
+                profiler.push(resource.getResourcePackName());
                 try {
                     InputStream inputStream = resource.getInputStream();
                     try {
@@ -72,7 +72,7 @@ public class SurfaceGenerationLoader extends SinglePreparationResourceReloader<L
                     }
                     inputStream.close();
                 } catch (RuntimeException runtimeBreak) {
-                    Biolith.LOGGER.warn("Parsing error loading surface generation '{}': '{}'", resource.getPackId(), runtimeBreak);
+                    Biolith.LOGGER.warn("Parsing error loading surface generation '{}': '{}'", resource.getResourcePackName(), runtimeBreak);
                 }
                 profiler.pop();
             }

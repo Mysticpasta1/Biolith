@@ -35,7 +35,7 @@ public class BiomePlacementLoader extends SinglePreparationResourceReloader<List
             for (Map.Entry<Identifier, Resource> entry : BIOME_PLACEMENT_FINDER.findResources(manager).entrySet()) {
                 Resource resource = entry.getValue();
 
-                profiler.push(resource.getPackId());
+                profiler.push(resource.getResourcePackName());
                 try {
                     InputStream inputStream = resource.getInputStream();
                     try {
@@ -71,7 +71,7 @@ public class BiomePlacementLoader extends SinglePreparationResourceReloader<List
                     }
                     inputStream.close();
                 } catch (RuntimeException runtimeBreak) {
-                    Biolith.LOGGER.warn("Parsing error loading biome placement '{}': '{}'", resource.getPackId(), runtimeBreak);
+                    Biolith.LOGGER.warn("Parsing error loading biome placement '{}': '{}'", resource.getResourcePackName(), runtimeBreak);
                 }
                 profiler.pop();
             }

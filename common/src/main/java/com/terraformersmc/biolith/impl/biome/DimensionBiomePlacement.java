@@ -7,6 +7,7 @@ import com.terraformersmc.biolith.impl.Biolith;
 import com.terraformersmc.biolith.impl.commands.BiolithDescribeCommand;
 import com.terraformersmc.biolith.impl.config.BiolithState;
 import com.terraformersmc.biolith.impl.noise.OpenSimplexNoise2;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.*;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.util.Identifier;
@@ -43,7 +44,7 @@ public abstract class DimensionBiomePlacement {
         this.seedRandom = new Random(seed);
         this.replacementRequests.forEach((biomeKey, requestSet) -> requestSet.complete(BiomeCoordinator.getBiomeLookupOrThrow()));
         this.subBiomeRequests.forEach((biomeKey, requestSet) -> requestSet.complete(BiomeCoordinator.getBiomeLookupOrThrow()));
-        this.state.write();
+        this.state.writeNbt(new NbtCompound());
 
         // populate the seedlets from the game seed
         for (int i = 0; i < 8; ++i) {

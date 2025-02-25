@@ -1,5 +1,6 @@
 package com.terraformersmc.biolith.api.biome.sub;
 
+import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.terraformersmc.biolith.api.biome.BiolithFittestNodes;
@@ -7,6 +8,7 @@ import com.terraformersmc.biolith.impl.biome.DimensionBiomePlacement;
 import com.terraformersmc.biolith.impl.biome.sub.AllOfCriterion;
 import net.minecraft.registry.RegistryEntryLookup;
 import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.dynamic.Range;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.source.util.MultiNoiseUtil;
@@ -18,8 +20,20 @@ import org.jetbrains.annotations.Nullable;
  * for details on the default criteria.
  */
 public interface Criterion {
-    Codec<Criterion> CODEC = CriterionType.TYPE_CODEC.dispatch("type", Criterion::getType, CriterionType::getCodec);
-    Codec<Criterion> MATCHER_CODEC = Codec.withAlternative(CODEC, CODEC.listOf(), AllOfCriterion::new);
+    Codec<Criterion> CODEC = CriterionType.TYPE_CODEC.dispatch("type", Criterion::getType, (criterionType) -> criterionType.getCodec().codec());
+    Codec<Criterion> MATCHER_CODEC = Codec.either(CODEC, CODEC.listOf())
+            .xmap(
+                    either -> either.map(
+                            criterion -> criterion,
+                            AllOfCriterion::new
+                    ),
+                    criterion -> {
+                        if (criterion instanceof AllOfCriterion allOfCriterion) {
+                            return Either.right(allOfCriterion.criteria());
+                        }
+                        return Either.left(criterion);
+                    }
+            );
 
     /**
      * @return The registered {@link CriterionType} of the criterion
